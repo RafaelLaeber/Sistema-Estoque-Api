@@ -1,0 +1,41 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  review:
+    # Só roda em PRs abertos pelo dono do repositório, evitando prompt injection de terceiros
+    if: github.event.pull_request.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Claude revisa e faz o merge
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: |
+            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh pr merge:*)"
+          prompt: |
+            Revise o pull request #${{ github.event.pull_request.number }} do repositório ${{ github.repository }}.
+
+            1. Use `gh pr view` e `gh pr diff` para ler o PR e as alterações.
+            2. Verifique se o conteúdo está correto: sem segredos, sem código malicioso,
+               sem remoção de arquivos existentes e com descrição coerente com as alterações.
+            3. Publique a análise com `gh pr comment`, em português, terminando com uma linha
+               "VEREDITO: APROVADO" ou "VEREDITO: REPROVADO".
+            4. Se APROVADO, faça o merge com `gh pr merge ${{ github.event.pull_request.number }} --squash`.
+               Se REPROVADO, não faça o merge e explique o motivo no comentário.
